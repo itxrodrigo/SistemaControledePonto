@@ -448,121 +448,80 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script>
-        const supabase = window.supabase.createClient('https://ujkmljpspoxwjkmuoubm.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqa21sanBzcG94d2prbXVvdWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMzE1MjksImV4cCI6MjA2NDcwNzUyOX0.Z4C1nKrbdwLpAb_ShpNMVI66A_E_YRkxeaB3GQIdgBo');
-        document.getElementById('btnLogin').addEventListener('click', async () => {
-            const email = document.getElementById('loginUsuario').value;
-            const senha = document.getElementById('loginSenha').value;
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email: email,
-                password: senha
-            });
-            if (error) {
-                document.getElementById('loginErro').style.display = 'block';
-            } else {
-                document.getElementById('loginScreen').style.display = 'none';
-                document.querySelector('.container').style.display = 'block';
+const supabase = window.supabase.createClient('https://ujkmljpspoxwjkmuoubm.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqa21sanBzcG94d2prbXVvdWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMzE1MjksImV4cCI6MjA2NDcwNzUyOX0.Z4C1nKrbdwLpAb_ShpNMVI66A_E_YRkxeaB3GQIdgBo');
 
-                // Após login bem-sucedido
-                const userId = data.user.id;
+// Função para mostrar tela principal
+async function mostrarPrincipal(user) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.querySelector('.container').style.display = 'block';
 
-                // Busca o perfil do usuário na tabela 'perfis'
-                const { data: perfil, error: perfilError } = await supabase
-                    .from('perfis')
-                    .select('nome')
-                    .eq('id', userId)
-                    .single();
+    // Busca o perfil do usuário na tabela 'perfis'
+    const { data: perfil } = await supabase
+        .from('perfis')
+        .select('nome')
+        .eq('id', user.id)
+        .single();
 
-                if (perfil && perfil.nome) {
-                    document.querySelector('.user-name').textContent = 'Funcionário: ' + perfil.nome;
-                } else {
-                    document.querySelector('.user-name').textContent = 'Funcionário: ' + data.user.email;
-                }
+    if (perfil && perfil.nome) {
+        document.querySelector('.user-name').textContent = 'Funcionário: ' + perfil.nome;
+    } else {
+        document.querySelector('.user-name').textContent = 'Funcionário: ' + user.email;
+    }
 
-                // Atualiza hora e data em tempo real
-                function atualizarHoraData() {
-                    const agora = new Date();
-                    document.getElementById('currentTime').textContent = agora.toLocaleTimeString('pt-BR');
-                    document.getElementById('currentDate').textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-                }
-                atualizarHoraData();
-                setInterval(atualizarHoraData, 1000);
-            }
-        });
+    // Atualiza hora e data em tempo real
+    function atualizarHoraData() {
+        const agora = new Date();
+        document.getElementById('currentTime').textContent = agora.toLocaleTimeString('pt-BR');
+        document.getElementById('currentDate').textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+    atualizarHoraData();
+    setInterval(atualizarHoraData, 1000);
+}
 
-        let geoPosition = null; // Variável global para armazenar a localização
+// Checa sessão ao carregar a página
+window.addEventListener('DOMContentLoaded', async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session && session.user) {
+        mostrarPrincipal(session.user);
+    } else {
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.querySelector('.container').style.display = 'none';
+    }
+});
 
-        async function registrarPonto(tipo) {
-            const statusDiv = document.getElementById('statusMessage');
-            statusDiv.textContent = 'Registrando ponto...';
-            statusDiv.className = 'status show';
+// Login
+document.getElementById('btnLogin').addEventListener('click', async () => {
+    const email = document.getElementById('loginUsuario').value;
+    const senha = document.getElementById('loginSenha').value;
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: senha
+    });
+    if (error) {
+        document.getElementById('loginErro').style.display = 'block';
+    } else {
+        mostrarPrincipal(data.user);
+    }
+});
 
-            // Pega usuário logado
-            const { data: userData } = await supabase.auth.getUser();
-            const user = userData.user;
+// Logout
+document.querySelector('.btn-logout').addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    document.querySelector('.container').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    // Limpa campos de login
+    document.getElementById('loginUsuario').value = '';
+    document.getElementById('loginSenha').value = '';
+    document.getElementById('loginErro').style.display = 'none';
+});
 
-            if (!user) {
-                statusDiv.className = 'status error show';
-                statusDiv.textContent = 'Usuário não autenticado!';
-                return;
-            }
-
-            // Função para registrar no Supabase
-            async function registrarComLocalizacao(latitude, longitude) {
-                const agora = new Date();
-                const horario = agora.toLocaleTimeString('pt-BR');
-                const dataHoje = agora.toLocaleDateString('en-CA');
-
-                const { error } = await supabase
-                    .from('registros_ponto')
-                    .insert([{
-                        user_id: user.id,
-                        nome: user.email,
-                        tipo: tipo,
-                        data: dataHoje,
-                        horario: horario,
-                        timestamp: agora.toISOString(),
-                        latitude: latitude,
-                        longitude: longitude
-                    }]);
-
-                if (!error) {
-                    statusDiv.className = 'status success show';
-                    statusDiv.textContent = `Ponto de ${tipo} registrado com sucesso às ${horario}`;
-                } else {
-                    statusDiv.className = 'status error show';
-                    statusDiv.textContent = 'Erro ao registrar ponto!';
-                }
-
-                setTimeout(() => {
-                    statusDiv.classList.remove('show');
-                }, 4000);
-            }
-
-            // Se já temos a localização, usa ela
-            if (geoPosition) {
-                registrarComLocalizacao(geoPosition.latitude, geoPosition.longitude);
-            } else {
-                // Solicita localização apenas uma vez
-                if (!navigator.geolocation) {
-                    statusDiv.className = 'status error show';
-                    statusDiv.textContent = 'Geolocalização não suportada!';
-                    return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        geoPosition = {
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude
-                        };
-                        registrarComLocalizacao(geoPosition.latitude, geoPosition.longitude);
-                    },
-                    (error) => {
-                        statusDiv.className = 'status error show';
-                        statusDiv.textContent = 'Não foi possível obter a localização!';
-                    }
-                );
-            }
-        }
+// Opcional: escuta mudanças de sessão (logout em outra aba, etc)
+supabase.auth.onAuthStateChange((event, session) => {
+    if (!session) {
+        document.querySelector('.container').style.display = 'none';
+        document.getElementById('loginScreen').style.display = 'flex';
+    }
+});
     </script>
 </body>
 </html>
