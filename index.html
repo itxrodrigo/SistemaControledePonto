@@ -386,12 +386,13 @@
         }
 
         @media (max-width: 600px) {
-            .login-card {
-                min-width: 90vw;
-                padding: 28px 8px 24px 8px;
+            .buttons-container {
+                grid-template-columns: 1fr;
+                gap: 12px;
             }
-            .login-title {
-                font-size: 1.3rem;
+            .btn, .btn-entrada, .btn-saida {
+                font-size: 1.1rem;
+                padding: 14px 0;
             }
         }
     </style>
@@ -424,7 +425,7 @@
             <div class="current-date" id="currentDate">-- de ----- de ----</div>
         </div>
 
-        <div class="buttons-container">
+        <div class="buttons-container" id="botoesPonto">
             <button class="btn btn-entrada" onclick="registrarPonto('Entrada')">
                 ⏰ ENTRADA
             </button>
@@ -441,7 +442,9 @@
 
         <div class="status" id="statusMessage"></div>
 
-        <button class="btn-logout">
+        <div id="batidasUsuario"></div>
+
+        <button class="btn-logout" id="btnLogout">
             Sair
         </button>
     </div>
@@ -449,6 +452,9 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script>
 const supabase = window.supabase.createClient('https://ujkmljpspoxwjkmuoubm.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqa21sanBzcG94d2prbXVvdWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMzE1MjksImV4cCI6MjA2NDcwNzUyOX0.Z4C1nKrbdwLpAb_ShpNMVI66A_E_YRkxeaB3GQIdgBo');
+
+// Variável global para armazenar a localização
+let geoPosition = null;
 
 // Função para mostrar tela principal
 async function mostrarPrincipal(user) {
@@ -483,6 +489,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session && session.user) {
         mostrarPrincipal(session.user);
+        await carregarBatidas();
     } else {
         document.getElementById('loginScreen').style.display = 'flex';
         document.querySelector('.container').style.display = 'none';
@@ -501,11 +508,133 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
         document.getElementById('loginErro').style.display = 'block';
     } else {
         mostrarPrincipal(data.user);
+        await carregarBatidas();
     }
 });
 
+// Função para carregar as batidas do usuário
+async function carregarBatidas() {
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+    const { data: batidas, error } = await supabase
+        .from('registros_ponto')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: false });
+
+    const batidasDiv = document.getElementById('batidasUsuario');
+    if (error || !batidas) {
+        batidasDiv.innerHTML = '<div style="color:#c53030;">Erro ao carregar registros.</div>';
+        return;
+    }
+    if (batidas.length === 0) {
+        batidasDiv.innerHTML = ''; // Removido: Nenhum registro encontrado.
+        return;
+    }
+    // Monta tabela simples
+    let html = `<table style="width:100%;margin-top:18px;font-size:1.1rem;border-collapse:collapse;">
+        <tr style="background:#e9ecef;">
+            <th style="padding:6px;">Data</th>
+            <th style="padding:6px;">Horário</th>
+            <th style="padding:6px;">Tipo</th>
+        </tr>`;
+    for (const b of batidas) {
+        html += `<tr>
+            <td style="padding:6px;">${new Date(b.timestamp).toLocaleDateString('pt-BR')}</td>
+            <td style="padding:6px;">${b.horario || new Date(b.timestamp).toLocaleTimeString('pt-BR')}</td>
+            <td style="padding:6px;">${b.tipo}</td>
+        </tr>`;
+    }
+    html += '</table>';
+    batidasDiv.innerHTML = html;
+}
+
+// Função para registrar ponto
+async function registrarPonto(tipo) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.textContent = 'Registrando ponto...';
+    statusDiv.className = 'status show';
+
+    // Desabilita botões durante o registro
+    const botoes = document.querySelectorAll('#botoesPonto button');
+    botoes.forEach(btn => btn.disabled = true);
+
+    // Pega usuário logado
+    const { data: userData } = await supabase.auth.getUser();
+    const user = userData.user;
+
+    if (!user) {
+        statusDiv.className = 'status error show';
+        statusDiv.textContent = 'Usuário não autenticado!';
+        botoes.forEach(btn => btn.disabled = false);
+        return;
+    }
+
+    // Função para registrar no Supabase
+    async function registrarComLocalizacao(latitude, longitude) {
+        const agora = new Date();
+        const horario = agora.toLocaleTimeString('pt-BR');
+        const dataHoje = agora.toLocaleDateString('en-CA');
+
+        const { error } = await supabase
+            .from('registros_ponto')
+            .insert([{
+                user_id: user.id,
+                tipo: tipo,
+                data: dataHoje,
+                horario: horario,
+                timestamp: agora.toISOString(),
+                latitude: latitude,
+                longitude: longitude
+            }]);
+
+        if (!error) {
+            statusDiv.className = 'status success show';
+            statusDiv.textContent = `Ponto de ${tipo} registrado com sucesso às ${horario}`;
+            await carregarBatidas();
+        } else {
+            statusDiv.className = 'status error show';
+            statusDiv.textContent = 'Erro ao registrar ponto!';
+        }
+
+        setTimeout(() => {
+            statusDiv.classList.remove('show');
+        }, 4000);
+
+        // Reabilita botões
+        botoes.forEach(btn => btn.disabled = false);
+    }
+
+    // Se já temos a localização, usa ela
+    if (geoPosition) {
+        registrarComLocalizacao(geoPosition.latitude, geoPosition.longitude);
+    } else {
+        // Solicita localização apenas uma vez
+        if (!navigator.geolocation) {
+            statusDiv.className = 'status error show';
+            statusDiv.textContent = 'Geolocalização não suportada!';
+            botoes.forEach(btn => btn.disabled = false);
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                geoPosition = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude
+                };
+                registrarComLocalizacao(geoPosition.latitude, geoPosition.longitude);
+            },
+            (error) => {
+                statusDiv.className = 'status error show';
+                statusDiv.textContent = 'Não foi possível obter a localização!';
+                botoes.forEach(btn => btn.disabled = false);
+            }
+        );
+    }
+}
+
 // Logout
-document.querySelector('.btn-logout').addEventListener('click', async () => {
+document.getElementById('btnLogout').addEventListener('click', async () => {
     await supabase.auth.signOut();
     document.querySelector('.container').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';

@@ -1,0 +1,8 @@
+BANCO SUPABASE
+
+rodrigomoreiraalvez@icloud.com
+Amora@124
+
+_____________________________
+
+Criar usuario no Auth e depois na tabela perfis
