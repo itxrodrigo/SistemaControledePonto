@@ -451,10 +451,66 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script>
-const supabase = window.supabase.createClient('https://ujkmljpspoxwjkmuoubm.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqa21sanBzcG94d2prbXVvdWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMzE1MjksImV4cCI6MjA2NDcwNzUyOX0.Z4C1nKrbdwLpAb_ShpNMVI66A_E_YRkxeaB3GQIdgBo');
+// Inicializa o Supabase
+const supabase = window.supabase.createClient(
+    'https://ujkmljpspoxwjkmuoubm.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVqa21sanBzcG94d2prbXVvdWJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMzE1MjksImV4cCI6MjA2NDcwNzUyOX0.Z4C1nKrbdwLpAb_ShpNMVI66A_E_YRkxeaB3GQIdgBo'
+);
 
-// Variável global para armazenar a localização
-let geoPosition = null;
+// Salva sessão no localStorage
+function salvarSessaoLocal(session) {
+    if (session) {
+        localStorage.setItem('supabase.session', JSON.stringify(session));
+    }
+}
+
+// Remove sessão do localStorage
+function removerSessaoLocal() {
+    localStorage.removeItem('supabase.session');
+}
+
+// Recupera sessão do localStorage
+function obterSessaoLocal() {
+    const sessao = localStorage.getItem('supabase.session');
+    return sessao ? JSON.parse(sessao) : null;
+}
+
+// Checa sessão ao carregar a página
+window.addEventListener('DOMContentLoaded', async () => {
+    let session = obterSessaoLocal();
+
+    if (!session) {
+        // Se não houver sessão local, tenta pegar do Supabase (primeiro acesso)
+        const { data } = await supabase.auth.getSession();
+        session = data.session;
+        if (session) salvarSessaoLocal(session);
+    }
+
+    if (session && session.user) {
+        mostrarPrincipal(session.user);
+        await carregarBatidas();
+    } else {
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.querySelector('.container').style.display = 'none';
+    }
+});
+
+// Login
+document.getElementById('btnLogin').addEventListener('click', async () => {
+    const email = document.getElementById('loginUsuario').value;
+    const senha = document.getElementById('loginSenha').value;
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: senha
+    });
+    if (error) {
+        document.getElementById('loginErro').style.display = 'block';
+    } else {
+        salvarSessaoLocal(data.session);
+        mostrarPrincipal(data.user);
+        await carregarBatidas();
+    }
+});
 
 // Função para mostrar tela principal
 async function mostrarPrincipal(user) {
@@ -483,34 +539,6 @@ async function mostrarPrincipal(user) {
     atualizarHoraData();
     setInterval(atualizarHoraData, 1000);
 }
-
-// Checa sessão ao carregar a página
-window.addEventListener('DOMContentLoaded', async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session && session.user) {
-        mostrarPrincipal(session.user);
-        await carregarBatidas();
-    } else {
-        document.getElementById('loginScreen').style.display = 'flex';
-        document.querySelector('.container').style.display = 'none';
-    }
-});
-
-// Login
-document.getElementById('btnLogin').addEventListener('click', async () => {
-    const email = document.getElementById('loginUsuario').value;
-    const senha = document.getElementById('loginSenha').value;
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: senha
-    });
-    if (error) {
-        document.getElementById('loginErro').style.display = 'block';
-    } else {
-        mostrarPrincipal(data.user);
-        await carregarBatidas();
-    }
-});
 
 // Função para carregar as batidas do usuário
 async function carregarBatidas() {
@@ -636,17 +664,21 @@ async function registrarPonto(tipo) {
 // Logout
 document.getElementById('btnLogout').addEventListener('click', async () => {
     await supabase.auth.signOut();
+    removerSessaoLocal();
     document.querySelector('.container').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
-    // Limpa campos de login
     document.getElementById('loginUsuario').value = '';
     document.getElementById('loginSenha').value = '';
     document.getElementById('loginErro').style.display = 'none';
 });
 
-// Opcional: escuta mudanças de sessão (logout em outra aba, etc)
+// Escuta eventos de autenticação
 supabase.auth.onAuthStateChange((event, session) => {
-    if (!session) {
+    if (event === 'SIGNED_IN' && session) {
+        salvarSessaoLocal(session);
+    }
+    if (event === 'SIGNED_OUT') {
+        removerSessaoLocal();
         document.querySelector('.container').style.display = 'none';
         document.getElementById('loginScreen').style.display = 'flex';
     }
