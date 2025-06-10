@@ -512,6 +512,13 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
     }
 });
 
+// Permite submit com Enter no mobile
+document.getElementById('loginSenha').addEventListener('keyup', function(e) {
+    if (e.key === 'Enter') {
+        document.getElementById('btnLogin').click();
+    }
+});
+
 // Função para mostrar tela principal
 async function mostrarPrincipal(user) {
     document.getElementById('loginScreen').style.display = 'none';
@@ -556,7 +563,7 @@ async function carregarBatidas() {
         return;
     }
     if (batidas.length === 0) {
-        batidasDiv.innerHTML = ''; // Removido: Nenhum registro encontrado.
+        batidasDiv.innerHTML = '<div style="color:#4953a6;">Nenhum registro encontrado.</div>';
         return;
     }
     // Monta tabela simples
@@ -576,6 +583,9 @@ async function carregarBatidas() {
     html += '</table>';
     batidasDiv.innerHTML = html;
 }
+
+// Variável global para localização
+let geoPosition = null;
 
 // Função para registrar ponto
 async function registrarPonto(tipo) {
